@@ -49,17 +49,47 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   (`nd._show`); a **new node every 5 min** (`spawnNode()` / `G.nextNode`) with a cue + minimap reveal.
 - **Fixed the auto-restart bug**: `startGame`/restart gated on `appState` (+600ms debounce); restart
   only from `over`, start only from `menu`. **Keep these guards** (see CLAUDE.md gotcha — bit twice).
-- Foundations: fog of war, camera + minimap, 3000×1900 world, persistent-debris economy, Silo supply
-  cap (CC houses 30, +10/Silo), Turret defense.
-
-## ROADMAP — what's left (the task list is NOT persisted across sessions; this is it)
-**Next the user wanted (biggest):**
-- **#24 — 4× map + up to 3 colored AI opponents (FFA).** The big refactor: generalize the 2-team
-  ('player'/'enemy') + per-team-resource model to **N teams** (player + 1–3 AIs), each its own color,
-  resources/parts/upg/queues, and AI instance; **free-for-all** targeting via `enemiesOf` (everyone
-  not on your team); win = all enemy CCs gone, lose = your CC gone. Menu selector for AI count. World
-  ~4× area (≈2× each dim → ~6000×3800) with bases placed around it. *Wide change — do it as its own
-  carefully-verified pass; this is exactly where rushing reintroduces regressions.*
+- Foundations: fog of war, camera + minimap, 6000×3800 world, persistent-debris economy, Silo supply
+  cap (base 30, +10/Silo), Turret defense.
+- **Match Setup screen + multi-AI FFA (#24 — DONE).** Dedicated pre-game `#setup` screen (appState
+  `settings`, reached from the menu's "SET UP MATCH ▸") driven by a central **`CFG`** object
+  (persisted to `localStorage` `scrapline.cfg`). Exposes game speed, starting scrap/parts (player+AI),
+  node richness, AI difficulty preset + **1–3 opponents** + aggression/economy overrides, supply cap,
+  start army, **fog on/off**, base placement (symmetric/random), and resource-node count. The sim is
+  now **N-team**: per-team keyed state (`res`/`parts`/`upg`/`upgQueue` maps over `G.teams`),
+  `enemiesOf` = everyone-not-you (true FFA, AIs fight each other), one `AI` per AI team targeting the
+  nearest rival CC, per-team colors (`TEAM_COL`/`TEAM_DARK`: player cyan, ai1 red, ai2 orange,
+  ai3 purple), win = all rival CCs gone / lose = player CC gone. World grew to 6000×3800 with bases on
+  an ellipse ring via `layoutMap()`. *Balance across 2–4 players is unplaytested — tune with the user.*
+- **Gameplay-analysis pass (5 improvements — DONE).**
+  - **Feel fixes:** `separate()` is now velocity-based (dt-scaled, capped, wall-aware) — no more on-screen
+    shoving or wall-clipping. **Veterancy**: `Shell` carries its `owner`; `G.damage(...,attacker)` credits
+    kills → `G.promote()` (2/5/9 kills → vet 1/2/3, +15% hp & +12% dmg each, `baseDmg` bumped for Artillery
+    so siege recompute sticks). Veterans draw gold chevrons + size scale (`vscale()`).
+  - **Upgrade recognizability:** tank/turret `draw()` now reflect research — **range**=longer barrel,
+    **power**=thicker/brighter barrel + white tip, **armor**=extra plating + size — plus the veterancy scale.
+  - **Building construction time:** structures placed via `placeStructureAt` start `built=false` at 15% HP,
+    ramp over 6–12 s with an animated progress ring + countdown, are attackable, and are inert until done
+    (`popCap`/`hasTech` ignore unbuilt; turrets don't fire). Handled centrally in the `update` building loop.
+  - **Parts as a 2nd currency:** shared `UNIT_COST/UNIT_TIME/UNIT_PARTS` + `STRUCT_COST/STRUCT_PARTS` tables;
+    Artillery (+40◆), Foundry (+40◆), Turret/Silo (+15◆) cost parts too (player + AI pay). **Turrets now
+    upgrade**: range/power derive live from `G.upg[team]`, armor bumps turret maxhp in `completeUpg` + at placement.
+  - **FFA smarts + map control:** AI `pickTargetCC` is now scored (weakest + closest + **retaliate** via
+    `G.threat[team]` set in `damage` + **anti-gang** crowding penalty via `ai.targetTeam`). A capturable
+    center **Relay** (`G.relays`, `updateRelays`) grants the uncontested holder scrap/parts income + vision;
+    drawn in-world + on the minimap.
+- **Balance pass (sim-tested — DONE).** Ran a headless AI-vs-AI harness (attach an `AI` to the `'player'`
+  slot so all teams are AI-driven; loop `G.update` to resolution) measuring win/timeout rates, duration,
+  parts curves, tech-reach. **Finding:** symmetric defensive standoff — attacks bounced off tanky CCs and
+  the debris-refuel economy sustained endless attrition → **65–75% of matches never resolved**, and
+  scavenged parts inflated to ~650. **Tuning applied:** CC HP 1000→**520**; Turret dmg 14→**11**; scavenger
+  parts yield ~halved (`clearClutter`: debris 4→2, wreckage `value*2`→`value*1.1`); AI standing-army cap
+  `wave+2`→**+4** and waves now **focus-fire the target CC** (`attackTarget=tcc`) with a **33% chance to
+  seize the Relay** instead; AI siege preference 0.3→**0.45**; **Relay income 8/3 → 16/5 per s** (strong
+  enough to snowball and break ties); and a **"scrapline collapse" sudden-death** (`SUDDEN_T=240`) that
+  decays all CCs after 4 min so nothing stalemates. **Result:** timeout **0%** across 1v1 / 4-team normal /
+  4-team hard; match length ≈ 86 s (hard) to ≈ 300 s (stalemate-prone 1v1, caught by collapse); parts peak
+  ~150–280. *Still first-pass vs a human — the harness is symmetric AI-vs-AI, the worst case for stalemates.*
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
@@ -85,5 +115,7 @@ Approved plan with fuller detail: `~/.claude/plans/make-these-suggestions-into-w
   a real playtest/tuning pass is still owed. Ask the user how it *feels* before deep balance work.
 
 ## Suggested first move in the new session
-Confirm with the user: jump into **#24 (4× map + multi-AI)**, or do a quick playtest/tuning pass on the
-current build first. Re-publish the Artifact once the tool is available so the hosted link isn't stale.
+With **#24 done**, the highest-value next step is a **playtest/tuning pass** on 2–4-player FFA (AI
+`DIFF` numbers, the new aggression/economy sliders, node/base spacing on the bigger map) — ask the user
+how it *feels* first. Then pick from the depth set (#18 smarter AI macro pairs well with FFA). Re-publish
+the Artifact once the tool is available so the hosted link isn't stale.
