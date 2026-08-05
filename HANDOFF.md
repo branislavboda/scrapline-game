@@ -90,6 +90,23 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   decays all CCs after 4 min so nothing stalemates. **Result:** timeout **0%** across 1v1 / 4-team normal /
   4-team hard; match length ≈ 86 s (hard) to ≈ 300 s (stalemate-prone 1v1, caught by collapse); parts peak
   ~150–280. *Still first-pass vs a human — the harness is symmetric AI-vs-AI, the worst case for stalemates.*
+- **Active abilities (#17 — DONE).** Player-only, parts-fueled, cooldown, click-to-target (arm via button or
+  Q/W/E → click map; right-click/Esc cancels; `G.aiming` mirrors the `G.placing` flow). `ABILITIES` config +
+  `G.abilityCd`/`G.effects`. **Barrage** (60◆/35s): ~9 explosions over 2 s in a radius, splash dmg + bonus vs
+  buildings (base-cracker). **Repair Field** (45◆/30s): instant 45%-maxhp heal to allies in radius. **Recon
+  Scan** (15◆/22s): reveals fog around a point ~6 s (ping in `updateFog`). HUD `#abilities` cluster (top-left)
+  with cooldown veil + cost; `updateEffects(dt)` ticks strikes. Also a strong late-game parts sink.
+- **Game-feel pass (StarCraft-fun — DONE).** Web-researched (pacing / attack-move / juice). **Root cause of
+  "plays badly": the map was so large a Tank took ~107 s to cross and an attack ~95 s to arrive** (dead time).
+  Fixes: **world size is now dynamic** (`let WORLD_W/H`, set per-match in the `Game` ctor by team count —
+  3400×2200 / 4200×2800 / 5000×3300, all far tighter than the old 6000×3800); **unit speeds +~30%** (Tank
+  56→74, Raider 112→146, Artillery 38→50, Harvester 52→66, Scavenger 66→84); **default `CFG.speed` 1.0→1.25**;
+  `layoutMap` node offsets are now proportional to map size. **Attack-move feel:** `CombatUnit.update` now
+  **stops to fight** any target in range (armies clash instead of milling); AI waves attack-move through
+  defenders. **Rally point:** select a player CC → right-click sets `cc.rally`; `spawn()` sends new units there
+  (dashed marker). **Result:** attack arrives in ~30 s; 1v1 resolves through real combat (~200 s, no more
+  permanent stalemate); hard 1v1 median ~104 s; difficulty gradient intact (player-slot win ~83% normal → ~29%
+  hard). Legend updated with ability + rally controls.
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).

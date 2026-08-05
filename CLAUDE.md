@@ -51,15 +51,25 @@ No build step, test suite, or linter.
   node richness/count, AI difficulty preset + count + aggression/economy overrides, supply-cap base, start
   army, fog on/off, base placement. `Game`, `AI`, `loop()` and `popCap()` all read it. Game speed is a `dt`
   multiplier in `loop()` (raw frame delta stays clamped at 0.04; camera uses the unscaled delta).
-- **Two coordinate spaces.** World pixels (`WORLD_W×WORLD_H` = 6000×3800) vs screen pixels. `render()`
-  translates by `-cam.x,-cam.y` (+shake) to draw the world; minimap, fog overlay, and DOM HUD are
-  screen-space. `s2w()` converts mouse→world; canvas input handlers convert with it and bail unless `appState==='playing'`.
-  `layoutMap({numTeams,nodeCount,placementStyle,richness})` places CCs on an ellipse ring + scatters nodes.
+- **Two coordinate spaces.** World pixels vs screen pixels. `WORLD_W/H` are **`let`, sized per-match** in the
+  `Game` ctor by team count (3400×2200 / 4200×2800 / 5000×3300 — kept tight so attacks arrive in ~30 s, not
+  the old ~95 s on a 6000-wide map). `render()` translates by `-cam.x,-cam.y` (+shake); minimap, fog overlay,
+  and DOM HUD are screen-space. `s2w()` converts mouse→world; handlers bail unless `appState==='playing'`.
+  `layoutMap({numTeams,nodeCount,placementStyle,richness})` places CCs on an ellipse ring + scatters nodes
+  (margin + node offsets are proportional to map size).
 - **Pathfinding & debris.** `Grid` (CELL=42) runs 8-dir A*; obstacles are reference-counted
   (`block`/`unblock` keep a per-cell count) because wreckage and settled debris both block and may share a
   cell. **Debris blocks paths**; scavengers auto-clear the nearest clutter to keep lanes open. The
   scavenger's per-frame auto-repath is throttled (`repathCd`) with work-range hysteresis (`_working`) + a
   give-up timer to stop it spinning/sticking — don't "simplify" them away.
+- **Attack-move combat feel.** `CombatUnit.update` **stops to fight** any target in range (`eng`) instead of
+  drifting past — armies actually clash. Right-click enemy = focus it; right-click ground = attack-move; AI
+  waves attack-move through defenders (not tunnel-vision the CC). Select a player CC + right-click = **rally**
+  (`cc.rally`; `spawn()` sends new units there).
+- **Active abilities (player, parts-fueled).** `ABILITIES` table + `G.abilityCd`/`G.effects`/`G.aiming`
+  (mirrors the `placing` arm→click-target flow). **Barrage** (AoE strike, bonus vs buildings), **Repair Field**
+  (instant heal in radius), **Recon Scan** (fog reveal via a `ping` effect read in `updateFog`). Hotkeys Q/W/E,
+  HUD `#abilities` cluster with cooldown veil; `updateEffects(dt)` ticks timed effects. A key late-game parts sink.
 - **Combat roster & hard counters.** `CombatUnit` (shared acquire/aim/fire) → `Tank` (armored line),
   `Raider` (fast, light), `Artillery` (siege, `splash`). Counters come from `e.cls`
   (`light`/`armored`/`siege`/`building`) × an attacker `bonusVs` multiplier applied in `G.damage` → the
@@ -110,10 +120,12 @@ No build step, test suite, or linter.
   published Artifact (the platform wraps content in `<body>`). Safe in both; don't "fix" it by moving it.
 - **Content-only on purpose** — keep all CSS/JS inline; any external request would break both the Artifact
   CSP and the self-host CSP.
-- **Balance numbers are sim-tuned, not human-playtested.** A headless AI-vs-AI harness (attach an `AI` to
+- **Balance & pacing are sim-tuned, not human-playtested.** A headless AI-vs-AI harness (attach an `AI` to
   the `'player'` slot, loop `G.update` to resolution) drove the current numbers (CC 520 HP, turret dmg 11,
-  relay income 16/5, sudden-death at 240 s, etc.) to eliminate the symmetric-standoff stalemate. Still tune
-  *feel* with the user — the harness is symmetric AI-vs-AI, the worst case, not real human play.
+  relay income 16/5, sudden-death at 240 s; a **game-feel pass** then shrank the map + sped units ~30% +
+  default speed 1.25 + attack-move so combat actually clashes). Outcome: no more permanent stalemates, 1v1
+  resolves via real combat (~200 s), hard 1v1 ~104 s, difficulty gradient intact. Still tune *feel* with the
+  user — the harness is symmetric AI-vs-AI, the worst case, not real human play.
 
 ## Status & roadmap
 `HANDOFF.md` is the living status doc: what's done and the pending roadmap. **Done:** the Match Setup screen
