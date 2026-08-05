@@ -111,6 +111,14 @@
   .abtn .an{font-weight:700;font-size:12px}
   .abtn .ac{float:right;color:var(--parts);font-weight:700;font-size:11px;margin-top:1px}
   .abtn .acd{position:absolute;left:0;top:0;height:100%;width:0%;background:rgba(4,8,18,.7);pointer-events:none;transition:width .12s linear}
+  /* first-run onboarding coach */
+  #tut{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);max-width:min(560px,90vw);display:flex;align-items:center;gap:12px;pointer-events:auto;z-index:6;
+    background:rgba(10,16,32,.92);border:1px solid rgba(63,233,255,.45);border-radius:12px;padding:10px 14px;backdrop-filter:blur(6px);box-shadow:0 0 26px rgba(63,233,255,.22)}
+  #tut.hidden{display:none}
+  #tutstep{color:var(--cyan);font-weight:800;font-size:12px;letter-spacing:1px;white-space:nowrap}
+  #tuttext{color:var(--ink);font-size:13px;line-height:1.4;flex:1}
+  #tutskip{pointer-events:auto;cursor:pointer;background:none;border:1px solid rgba(63,233,255,.3);color:var(--muted);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700}
+  #tutskip:hover{border-color:var(--cyan);color:var(--ink)}
   #menu, #pause, #setup{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:auto;
     background:radial-gradient(70% 70% at 50% 40%,rgba(8,12,26,.86),rgba(4,6,13,.97));z-index:6}
   body.menu #menu{display:flex} body.paused #pause{display:flex} body.settings #setup{display:flex}
@@ -208,6 +216,7 @@
     <button class="abtn" data-abil="repair"><span class="ak">W</span><span class="an">Repair</span><span class="ac">45◆</span><span class="acd"></span></button>
     <button class="abtn" data-abil="scan"><span class="ak">E</span><span class="an">Scan</span><span class="ac">15◆</span><span class="acd"></span></button>
   </div>
+  <div id="tut" class="hidden"><span id="tutstep">1/5</span><span id="tuttext"></span><button id="tutskip">Skip ▸</button></div>
   <div id="over" class="hidden"><div class="obox"><h1 id="omsg">VICTORY</h1><div id="osub"></div><div id="ostats"></div><button id="restart">NEW BATTLE</button></div></div>
   <div id="menu">
     <div class="mbox">
@@ -349,8 +358,22 @@ const visible = (x, y) => fogAt(x, y) === 2;
 const Audio2 = (() => {
   let ac=null, master=null, muted=false, vol=0.9;
   try { muted = localStorage.getItem('scrapline.muted')==='1'; const v=parseFloat(localStorage.getItem('scrapline.vol')); if (!isNaN(v)) vol=clamp(v,0,1); } catch(e){}
-  const ensure = () => { if (!ac){ try { ac = new (window.AudioContext || window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=muted?0:vol; master.connect(ac.destination); } catch(e){} } if (ac && ac.state==='suspended') ac.resume(); return ac; };
+  let musicGain=null;
+  const ensure = () => { if (!ac){ try { ac = new (window.AudioContext || window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=muted?0:vol; master.connect(ac.destination);
+      musicGain=ac.createGain(); musicGain.gain.value=0.5; musicGain.connect(master); } catch(e){} } if (ac && ac.state==='suspended') ac.resume(); return ac; };
   window.addEventListener('pointerdown', ensure);
+  // ---- procedural synthwave music bed (no external assets) ----
+  const CHORDS=[ [110,130.81,164.81,220], [87.31,110,130.81,174.61], [130.81,164.81,196,261.63], [98,123.47,146.83,196] ]; // Am F C G
+  const BEAT=0.357; let mOn=false, mNext=0, mStep=0;
+  function mnote(freq,t,dur,type,g){ if(!ac||!musicGain) return; const o=ac.createOscillator(), gn=ac.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,t);
+    gn.gain.setValueAtTime(0.0001,t); gn.gain.exponentialRampToValueAtTime(g,t+0.02); gn.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(gn).connect(musicGain); o.start(t); o.stop(t+dur+0.05); }
+  function mkick(t){ if(!ac||!musicGain) return; const o=ac.createOscillator(), gn=ac.createGain(); o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+    gn.gain.setValueAtTime(0.45,t); gn.gain.exponentialRampToValueAtTime(0.0001,t+0.16); o.connect(gn).connect(musicGain); o.start(t); o.stop(t+0.2); }
+  function mstep(t,step){ const bar=Math.floor(step/8)%4, b=step%8, ch=CHORDS[bar];
+    if (b===0){ mnote(ch[0]/2,t,BEAT*8,'triangle',0.05); for (const f of ch) mnote(f,t,BEAT*7.5,'sawtooth',0.010); mkick(t); }
+    else if (b===4){ mkick(t); mnote(ch[0],t,BEAT,'triangle',0.045); }
+    mnote(ch[b%ch.length]*2,t,BEAT*0.9,'square',0.013); }
   function tone(freq, dur, type, gain, slideTo){ const a=ensure(); if(!a||!master) return;
     const o=a.createOscillator(), g=a.createGain(); o.type=type||'sine'; o.frequency.value=freq;
     if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, a.currentTime+dur);
@@ -374,7 +397,11 @@ const Audio2 = (() => {
     repair(){ tone(520,0.07,'sine',0.04,820); },
     coin(){ tone(1040,0.06,'square',0.03,1300); },
     isMuted(){ return muted; },
-    toggleMute(){ muted=!muted; if (master) master.gain.value=muted?0:vol; try{ localStorage.setItem('scrapline.muted',muted?'1':'0'); }catch(e){} return muted; }
+    toggleMute(){ muted=!muted; if (master) master.gain.value=muted?0:vol; try{ localStorage.setItem('scrapline.muted',muted?'1':'0'); }catch(e){} return muted; },
+    musicSet(on){ if (on && !mOn){ mNext=(ac?ac.currentTime:0); mStep=0; } mOn=on; },
+    musicTick(){ if (!mOn) return; ensure(); if (!ac||!musicGain) return; const now=ac.currentTime;
+      if (mNext<now) mNext=now;   // catch up after a stall/tab-throttle
+      while (mNext < now+0.25){ mstep(mNext,mStep); mNext+=BEAT; mStep++; } }
   };
 })();
 
@@ -945,7 +972,7 @@ class Game {
     if (cost===undefined) return;
     if (type==='artillery' && !this.hasTech('player')) return;
     if (this.res.player<cost || this.parts.player<pcost) return; if (this.pop('player')>=this.popCap('player')) return;
-    this.res.player-=cost; if (pcost) this.addParts('player',-pcost); this.queue.push({type,time,total:time}); Audio2.build(); }
+    this.res.player-=cost; if (pcost) this.addParts('player',-pcost); this.queue.push({type,time,total:time}); if (tut.active) tut.f[type]=true; Audio2.build(); }
   // structure placement
   structCost(type){ return STRUCT_COST[type]||120; }
   structParts(type){ return STRUCT_PARTS[type]||0; }
@@ -1167,7 +1194,8 @@ function syncHUD(){ elRes.textContent=Math.round(G.res.player); elPrt.textConten
   for (const b of abilBtns){ const ty=b.dataset.abil, a=ABILITIES[ty], cd=G.abilityCd[ty]||0;
     b.disabled=G.over||cd>0||G.parts.player<a.parts; b.classList.toggle('armed',G.aiming===ty);
     const veil=b.querySelector('.acd'); if (veil) veil.style.width=(cd>0?(cd/a.cool*100):0)+'%';
-    const acEl=b.querySelector('.ac'); if (acEl) acEl.textContent = cd>0 ? Math.ceil(cd)+'s' : a.parts+'◆'; } }
+    const acEl=b.querySelector('.ac'); if (acEl) acEl.textContent = cd>0 ? Math.ceil(cd)+'s' : a.parts+'◆'; }
+  tutTick(); }
 
 function syncProd(){ const q=G.queue;
   if (q.length){ elProd.classList.remove('hidden'); const it=q[0];
@@ -1202,13 +1230,37 @@ function loadCfg(){ try{ const j=localStorage.getItem('scrapline.cfg'); if(j){ c
 function saveCfg(){ try{ localStorage.setItem('scrapline.cfg', JSON.stringify(CFG)); }catch(e){} }
 loadCfg();
 
+// ---------- first-run onboarding coach ----------
+const TUT_KEY='scrapline.onboarded';
+let tut={active:false, step:0, f:{}, endAt:0, _t4:false};
+const TUT_STEPS=[
+  {t:"Click your Command Center — the glowing base on the left.", done:()=>ccSelected()},
+  {t:"Build a Harvester — press H (or the Harvester button). It auto-mines scrap.", done:()=>tut.f.harvester},
+  {t:"Now build a Tank — press T.", done:()=>tut.f.tank},
+  {t:"Select a unit, then right-click the map to move it.", done:()=>tut.f.moved},
+  {t:"Goal: destroy the enemy Command Center. Use the ability bar (Q/W/E). Good luck!", done:()=>!!G && G.time>=tut.endAt},
+];
+const elTut=document.getElementById('tut'), elTutStep=document.getElementById('tutstep'), elTutText=document.getElementById('tuttext');
+function tutFinish(){ tut.active=false; try{ localStorage.setItem(TUT_KEY,'1'); }catch(e){} elTut.classList.add('hidden'); }
+function tutTick(){ if (!tut.active || appState!=='playing'){ elTut.classList.add('hidden'); return; }
+  for (let guard=0; guard<=TUT_STEPS.length; guard++){
+    const s=TUT_STEPS[tut.step]; if (!s){ tutFinish(); return; }
+    if (tut.step===4 && !tut._t4){ tut._t4=true; tut.endAt=(G?G.time:0)+7; }   // enter-step side effect BEFORE its done-check
+    if (s.done()){ tut.step++; continue; }
+    elTut.classList.remove('hidden'); elTutStep.textContent=(tut.step+1)+'/'+TUT_STEPS.length; elTutText.textContent=s.t; return;
+  } }
+document.getElementById('tutskip').addEventListener('click',e=>{ e.currentTarget.blur(); tutFinish(); });
+
 // ---------- app state / screens ----------
 let appState='menu', overAt=0;
 function setState(s){ appState=s; document.body.className=s; }
 function startGame(cfg){ CFG=cfg||CFG; lastCfg=CFG;
   const over=document.getElementById('over'); over.classList.add('hidden'); over.classList.remove('win','lose');
   document.getElementById('help').classList.add('hidden');
-  parts.length=0; decals.length=0; texts.length=0; UID=1; G=new Game(CFG); setState('playing'); }
+  parts.length=0; decals.length=0; texts.length=0; UID=1; G=new Game(CFG);
+  let onboarded=false; try{ onboarded=!!localStorage.getItem(TUT_KEY); }catch(e){}
+  tut = onboarded ? {active:false,step:0,f:{},endAt:0,_t4:false} : {active:true,step:0,f:{},endAt:0,_t4:false};
+  setState('playing'); }
 function quitToMenu(){ G=null; const over=document.getElementById('over'); over.classList.add('hidden'); over.classList.remove('win','lose'); setState('menu'); }
 function togglePause(){ if (appState==='playing') setState('paused'); else if (appState==='paused') setState('playing'); }
 function renderMenuBackdrop(){ ctx.setTransform(DPR,0,0,DPR,0,0); const bg=ctx.createRadialGradient(W*0.5,H*0.45,80,W*0.5,H*0.5,Math.max(W,H)*0.85); bg.addColorStop(0,'#0a1020'); bg.addColorStop(1,'#04060d'); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H); }
@@ -1242,7 +1294,7 @@ canvas.addEventListener('mousedown',e=>{ if (document.activeElement && document.
       else if (u instanceof CombatUnit){ if (foe){ u.attackTarget=foe; u.target=foe; u.moveTo(foe.x,foe.y,true); } else { u.attackTarget=null; u.moveTo(w.x,w.y,true); } }
       else if (u instanceof Harvester){ u.moveTo(w.x,w.y,true); u.state='seek'; u.node=null; }
     }
-    if (rallied) floatText(w.x,w.y-10,'RALLY',COL.player);
+    if (rallied) floatText(w.x,w.y-10,'RALLY',COL.player); else if (tut.active) tut.f.moved=true;
     ring(w.x,w.y, foe?COL.enemy:(rallied?COL.player:(ally?COL.parts:COL.player)), 3,22,.35); } });
 window.addEventListener('mouseup',e=>{ if (e.button!==0) return; panMM=false; const wasDown=down; down=false; if (appState!=='playing'||!G||!wasDown) return; const m=mouse(e);
   if (moved&&dragRect){ const a=s2w(Math.min(dragRect.x0,dragRect.x1),Math.min(dragRect.y0,dragRect.y1)), b=s2w(Math.max(dragRect.x0,dragRect.x1),Math.max(dragRect.y0,dragRect.y1));
@@ -1348,6 +1400,7 @@ function loop(now){ const raw=Math.min(0.04,(now-last)/1000); last=now;
       updateCam(raw);
     }
     if (G){ render(); syncHUD(); syncProd(); } else { renderMenuBackdrop(); }
+    Audio2.musicSet(appState==='playing'); Audio2.musicTick();
   } catch(e){ console.error('SCRAPLINE loop error (recovered):', e); }
   requestAnimationFrame(loop); }
 requestAnimationFrame(loop);

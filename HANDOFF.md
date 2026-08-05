@@ -107,6 +107,15 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   (dashed marker). **Result:** attack arrives in ~30 s; 1v1 resolves through real combat (~200 s, no more
   permanent stalemate); hard 1v1 median ~104 s; difficulty gradient intact (player-slot win ~83% normal → ~29%
   hard). Legend updated with ability + rally controls.
+- **v1.0 web-polish (IN PROGRESS).** Path chosen: ship a free, single-player **web** v1.0 (no multiplayer).
+  Done so far: **first-run onboarding coach** (`#tut`, 5 steps gated on player actions, Skip, persists via
+  `localStorage scrapline.onboarded`; driven by `tutTick()` in `syncHUD`); **procedural synthwave music bed**
+  (in `Audio2`: `musicSet`/`musicTick` lookahead scheduler, `CHORDS` Am-F-C-G, under the master mute; starts
+  on `appState==='playing'` from `loop()`). Perf measured OK (~178 units = 2.3 ms/update) → not a v1.0 blocker.
+  **Next v1.0:** juice/polish (hit + death feedback), itch packaging + branding (favicon, how-to), cross-browser
+  sanity. **Deferred:** full match autosave/resume (fragile + low-value for a real-time sim); touch/mobile
+  (desktop-first v1.0). *Note: pre-mortem said the real risk is demand, not features — soft-launch to real
+  players early.*
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
