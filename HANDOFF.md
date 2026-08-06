@@ -4,15 +4,39 @@ Read this together with the repo-wide **`/CLAUDE.md`** (its "SCRAPLINE architect
 preview & verification" sections are the technical map). This file is the *status + roadmap +
 decisions* so a fresh session can continue without re-deriving anything.
 
+## ⭐ START HERE — current status (Aug 2026)
+- **Where the code lives:** all work is merged into **`main`** (branch `abilities-and-game-feel` was
+  merged + deleted). `main` = the current game. Repo: `github.com/branislavboda/scrapline-game`.
+- **What's done:** the game is **v1.0 content-complete for a free desktop-web release** — Match Setup
+  screen + N-team FFA, active abilities (Q/W/E), a sim-tuned balance pass (no stalemates), a StarCraft-style
+  game-feel pass (tight map/speed, attack-move, rally), first-run onboarding, procedural music, juice, and a
+  full **neon-holo graphics pass** (bloom + holo floor + color grade + shadows + redrawn unit/building
+  silhouettes incl. a railgun tank). All verified console-error-free.
+- **THE open question is demand, not features** (see the pre-mortem lower down). **#1 next step:** the user
+  does the cross-browser check (Chrome/Firefox/**Safari** — needs their machine) and a **soft-launch to
+  30–50 real players** per **`docs/RELEASE.md`** (itch steps + page copy + checklist already written). Only
+  after that data should multiplayer / Steam / more content be considered.
+- **Optional graphics ceiling** if asked: a WebGL HDR pipeline (chromatic aberration, FXAA, tighter bloom).
+- **Git workflow (user preference, in memory):** new work goes on a feature branch → push → PR against
+  `main`, never commit straight to / fast-forward `main`. `gh` is **not installed** and couldn't be
+  auto-installed (sandbox blocks external binaries; `gh auth login` is interactive) — open PRs via the
+  browser compare URL `https://github.com/branislavboda/scrapline-game/compare/main...<branch>`.
+- **Preview gotcha (bit every session):** the sandbox can't read `~/Desktop`, so to preview you must copy
+  `index.html` to the session scratchpad + point `.claude/launch.json` there — then **`git checkout --
+  .claude/launch.json` to restore the portable `server.py` path BEFORE committing** (it's tracked; keep the
+  commit clean).
+
 ## What it is
-A polished single-file HTML5 Canvas RTS: `scrapline/index.html` (~1,015 lines, content-only — no
+A polished single-file HTML5 Canvas RTS: `scrapline/index.html` (~1,490 lines, content-only — no
 doctype/html/head/body — so it doubles as a Claude Artifact). One global `G` (a `Game`, created only
 in `startGame`) owns the whole sim. No build, no modules, no external requests.
 
 ## Design north star (decided with the user)
-Make it a **rich, StarCraft-like strategy game** — army composition, tech, map control, smart macro AI.
-**NOT** an arcade/survival score-chase (the user explicitly rejected survival mode + veterancy).
-"It ends too soon / too simple" was the complaint; the fix is depth + a real match arc.
+Make it a **rich, StarCraft-like strategy game** — army composition, tech, map control, smart macro AI,
+and a premium neon-holo look. **NOT** an arcade/survival score-chase.
+"It ends too soon / too simple / plays badly" was the recurring complaint; the fix was depth + a real
+match arc + game-feel/graphics polish (all now done). *(Note: veterancy WAS added later and is in the game —
+an earlier version of this doc said it was rejected; that's stale.)*
 
 ## Source of truth & delivery
 - **On-disk `scrapline/index.html` is authoritative.** Always edit + verify that.
@@ -90,6 +114,48 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   decays all CCs after 4 min so nothing stalemates. **Result:** timeout **0%** across 1v1 / 4-team normal /
   4-team hard; match length ≈ 86 s (hard) to ≈ 300 s (stalemate-prone 1v1, caught by collapse); parts peak
   ~150–280. *Still first-pass vs a human — the harness is symmetric AI-vs-AI, the worst case for stalemates.*
+- **Active abilities (#17 — DONE).** Player-only, parts-fueled, cooldown, click-to-target (arm via button or
+  Q/W/E → click map; right-click/Esc cancels; `G.aiming` mirrors the `G.placing` flow). `ABILITIES` config +
+  `G.abilityCd`/`G.effects`. **Barrage** (60◆/35s): ~9 explosions over 2 s in a radius, splash dmg + bonus vs
+  buildings (base-cracker). **Repair Field** (45◆/30s): instant 45%-maxhp heal to allies in radius. **Recon
+  Scan** (15◆/22s): reveals fog around a point ~6 s (ping in `updateFog`). HUD `#abilities` cluster (top-left)
+  with cooldown veil + cost; `updateEffects(dt)` ticks strikes. Also a strong late-game parts sink.
+- **Game-feel pass (StarCraft-fun — DONE).** Web-researched (pacing / attack-move / juice). **Root cause of
+  "plays badly": the map was so large a Tank took ~107 s to cross and an attack ~95 s to arrive** (dead time).
+  Fixes: **world size is now dynamic** (`let WORLD_W/H`, set per-match in the `Game` ctor by team count —
+  3400×2200 / 4200×2800 / 5000×3300, all far tighter than the old 6000×3800); **unit speeds +~30%** (Tank
+  56→74, Raider 112→146, Artillery 38→50, Harvester 52→66, Scavenger 66→84); **default `CFG.speed` 1.0→1.25**;
+  `layoutMap` node offsets are now proportional to map size. **Attack-move feel:** `CombatUnit.update` now
+  **stops to fight** any target in range (armies clash instead of milling); AI waves attack-move through
+  defenders. **Rally point:** select a player CC → right-click sets `cc.rally`; `spawn()` sends new units there
+  (dashed marker). **Result:** attack arrives in ~30 s; 1v1 resolves through real combat (~200 s, no more
+  permanent stalemate); hard 1v1 median ~104 s; difficulty gradient intact (player-slot win ~83% normal → ~29%
+  hard). Legend updated with ability + rally controls.
+- **v1.0 web-polish (IN PROGRESS).** Path chosen: ship a free, single-player **web** v1.0 (no multiplayer).
+  Done so far: **first-run onboarding coach** (`#tut`, 5 steps gated on player actions, Skip, persists via
+  `localStorage scrapline.onboarded`; driven by `tutTick()` in `syncHUD`); **procedural synthwave music bed**
+  (in `Audio2`: `musicSet`/`musicTick` lookahead scheduler, `CHORDS` Am-F-C-G, under the master mute; starts
+  on `appState==='playing'` from `loop()`). Perf measured OK (~178 units = 2.3 ms/update) → not a v1.0 blocker.
+  **Juice/polish (done):** screenshake is now **distance-attenuated** (`shake(a,x,y)` scales by distance to the
+  camera view — off-screen deaths no longer jolt) and softened (explosion 0.5→0.34, breakdown 0.18→0.12);
+  **selection feedback** (soft `Audio2.select()` blip + ring pop on drag/click/double-click select).
+  Packaging done: data-URI favicon + `docs/RELEASE.md` (itch steps, page copy, cross-browser checklist).
+  **Deferred:** full match autosave/resume (fragile + low-value for a real-time sim); touch/mobile
+  (desktop-first v1.0). *Note: pre-mortem said the real risk is demand, not features — soft-launch early.*
+- **Neon-holo graphics pass (chosen direction).** Self-contained Canvas-2D post-processing in `postFX()`
+  (called in `render()` after the world, before HUD): **bloom** (downsampled high-contrast bright-pass →
+  two additive blurred halos — threshold-style so it glows edges without washing out silhouettes), **CRT
+  scanlines**, and a **cyan/magenta soft-light color grade**. `FX_OFF` try/catch fallback. `drawBackground`
+  is now a **holographic floor** (faint minor grid + brighter pulsing major grid + a sweeping scan line +
+  glowing border). **Ground contact shadows** under all entities in `render()` for depth. Keeps single-file /
+  CSP (no WebGL, no assets). **Full silhouette redraw (done)** — consistent beveled-hull / top-lit language,
+  upgrade + veterancy visuals preserved: **Tank** = angular octagon hull + glowing side vents + low turret w/
+  **pulsing core** + **railgun barrel** (energy rail, muzzle glow, prongs); **Raider** = sleek dart + twin
+  engine glow + canopy; **Artillery** = heavy beveled siege chassis + deploy legs; **Harvester** = hauler +
+  collector mandibles + gold cargo core; **Scavenger** = rhombus drone + green emitter core; **Silo/Turret/
+  Foundry** got top-light volume (CC already strong). **Bloom sharpened** (higher bright-pass threshold +
+  reduced halo blur/alpha) so units stay crisp under glow. A full WebGL HDR pipeline (chromatic aberration,
+  FXAA, tighter bloom) remains the future ceiling if more fidelity is wanted.
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
