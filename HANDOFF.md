@@ -4,15 +4,39 @@ Read this together with the repo-wide **`/CLAUDE.md`** (its "SCRAPLINE architect
 preview & verification" sections are the technical map). This file is the *status + roadmap +
 decisions* so a fresh session can continue without re-deriving anything.
 
+## ⭐ START HERE — current status (Aug 2026)
+- **Where the code lives:** all work is merged into **`main`** (branch `abilities-and-game-feel` was
+  merged + deleted). `main` = the current game. Repo: `github.com/branislavboda/scrapline-game`.
+- **What's done:** the game is **v1.0 content-complete for a free desktop-web release** — Match Setup
+  screen + N-team FFA, active abilities (Q/W/E), a sim-tuned balance pass (no stalemates), a StarCraft-style
+  game-feel pass (tight map/speed, attack-move, rally), first-run onboarding, procedural music, juice, and a
+  full **neon-holo graphics pass** (bloom + holo floor + color grade + shadows + redrawn unit/building
+  silhouettes incl. a railgun tank). All verified console-error-free.
+- **THE open question is demand, not features** (see the pre-mortem lower down). **#1 next step:** the user
+  does the cross-browser check (Chrome/Firefox/**Safari** — needs their machine) and a **soft-launch to
+  30–50 real players** per **`docs/RELEASE.md`** (itch steps + page copy + checklist already written). Only
+  after that data should multiplayer / Steam / more content be considered.
+- **Optional graphics ceiling** if asked: a WebGL HDR pipeline (chromatic aberration, FXAA, tighter bloom).
+- **Git workflow (user preference, in memory):** new work goes on a feature branch → push → PR against
+  `main`, never commit straight to / fast-forward `main`. `gh` is **not installed** and couldn't be
+  auto-installed (sandbox blocks external binaries; `gh auth login` is interactive) — open PRs via the
+  browser compare URL `https://github.com/branislavboda/scrapline-game/compare/main...<branch>`.
+- **Preview gotcha (bit every session):** the sandbox can't read `~/Desktop`, so to preview you must copy
+  `index.html` to the session scratchpad + point `.claude/launch.json` there — then **`git checkout --
+  .claude/launch.json` to restore the portable `server.py` path BEFORE committing** (it's tracked; keep the
+  commit clean).
+
 ## What it is
-A polished single-file HTML5 Canvas RTS: `scrapline/index.html` (~1,015 lines, content-only — no
+A polished single-file HTML5 Canvas RTS: `scrapline/index.html` (~1,490 lines, content-only — no
 doctype/html/head/body — so it doubles as a Claude Artifact). One global `G` (a `Game`, created only
 in `startGame`) owns the whole sim. No build, no modules, no external requests.
 
 ## Design north star (decided with the user)
-Make it a **rich, StarCraft-like strategy game** — army composition, tech, map control, smart macro AI.
-**NOT** an arcade/survival score-chase (the user explicitly rejected survival mode + veterancy).
-"It ends too soon / too simple" was the complaint; the fix is depth + a real match arc.
+Make it a **rich, StarCraft-like strategy game** — army composition, tech, map control, smart macro AI,
+and a premium neon-holo look. **NOT** an arcade/survival score-chase.
+"It ends too soon / too simple / plays badly" was the recurring complaint; the fix was depth + a real
+match arc + game-feel/graphics polish (all now done). *(Note: veterancy WAS added later and is in the game —
+an earlier version of this doc said it was rejected; that's stale.)*
 
 ## Source of truth & delivery
 - **On-disk `scrapline/index.html` is authoritative.** Always edit + verify that.
