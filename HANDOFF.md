@@ -124,9 +124,11 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   scanlines**, and a **cyan/magenta soft-light color grade**. `FX_OFF` try/catch fallback. `drawBackground`
   is now a **holographic floor** (faint minor grid + brighter pulsing major grid + a sweeping scan line +
   glowing border). **Ground contact shadows** under all entities in `render()` for depth. Keeps single-file /
-  CSP (no WebGL, no assets). *Pending (user picked it too): a proper unit/building silhouette redraw — the new
-  lighting already lifts the existing shapes, so that's an optional iterative art pass.* A full WebGL HDR
-  pipeline (chromatic aberration, FXAA, tighter bloom) is the future ceiling if more fidelity is wanted.
+  CSP (no WebGL, no assets). **Combat-trio silhouette redraw (done):** Tank = tracked wedge hull + top-light
+  + compact turret + prominent gun; Raider = sleek dart + twin engine glow + canopy; Artillery = heavy
+  beveled siege chassis + deploy legs — a consistent beveled-hull / top-lit language, upgrade + veterancy
+  visuals preserved. (Harvester/Scavenger/buildings left as-is; can get the same pass later.) A full WebGL
+  HDR pipeline (chromatic aberration, FXAA, tighter bloom) remains the future ceiling if more fidelity is wanted.
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
