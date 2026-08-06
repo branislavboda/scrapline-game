@@ -115,9 +115,18 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   **Juice/polish (done):** screenshake is now **distance-attenuated** (`shake(a,x,y)` scales by distance to the
   camera view — off-screen deaths no longer jolt) and softened (explosion 0.5→0.34, breakdown 0.18→0.12);
   **selection feedback** (soft `Audio2.select()` blip + ring pop on drag/click/double-click select).
-  **Next v1.0:** itch packaging + branding (favicon, how-to), cross-browser sanity. **Deferred:** full match
-  autosave/resume (fragile + low-value for a real-time sim); touch/mobile (desktop-first v1.0). *Note: pre-mortem
-  said the real risk is demand, not features — soft-launch to real players early.*
+  Packaging done: data-URI favicon + `docs/RELEASE.md` (itch steps, page copy, cross-browser checklist).
+  **Deferred:** full match autosave/resume (fragile + low-value for a real-time sim); touch/mobile
+  (desktop-first v1.0). *Note: pre-mortem said the real risk is demand, not features — soft-launch early.*
+- **Neon-holo graphics pass (chosen direction).** Self-contained Canvas-2D post-processing in `postFX()`
+  (called in `render()` after the world, before HUD): **bloom** (downsampled high-contrast bright-pass →
+  two additive blurred halos — threshold-style so it glows edges without washing out silhouettes), **CRT
+  scanlines**, and a **cyan/magenta soft-light color grade**. `FX_OFF` try/catch fallback. `drawBackground`
+  is now a **holographic floor** (faint minor grid + brighter pulsing major grid + a sweeping scan line +
+  glowing border). **Ground contact shadows** under all entities in `render()` for depth. Keeps single-file /
+  CSP (no WebGL, no assets). *Pending (user picked it too): a proper unit/building silhouette redraw — the new
+  lighting already lifts the existing shapes, so that's an optional iterative art pass.* A full WebGL HDR
+  pipeline (chromatic aberration, FXAA, tighter bloom) is the future ceiling if more fidelity is wanted.
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
