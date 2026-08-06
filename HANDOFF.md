@@ -124,11 +124,14 @@ Make it a **rich, StarCraft-like strategy game** — army composition, tech, map
   scanlines**, and a **cyan/magenta soft-light color grade**. `FX_OFF` try/catch fallback. `drawBackground`
   is now a **holographic floor** (faint minor grid + brighter pulsing major grid + a sweeping scan line +
   glowing border). **Ground contact shadows** under all entities in `render()` for depth. Keeps single-file /
-  CSP (no WebGL, no assets). **Combat-trio silhouette redraw (done):** Tank = tracked wedge hull + top-light
-  + compact turret + prominent gun; Raider = sleek dart + twin engine glow + canopy; Artillery = heavy
-  beveled siege chassis + deploy legs — a consistent beveled-hull / top-lit language, upgrade + veterancy
-  visuals preserved. (Harvester/Scavenger/buildings left as-is; can get the same pass later.) A full WebGL
-  HDR pipeline (chromatic aberration, FXAA, tighter bloom) remains the future ceiling if more fidelity is wanted.
+  CSP (no WebGL, no assets). **Full silhouette redraw (done)** — consistent beveled-hull / top-lit language,
+  upgrade + veterancy visuals preserved: **Tank** = angular octagon hull + glowing side vents + low turret w/
+  **pulsing core** + **railgun barrel** (energy rail, muzzle glow, prongs); **Raider** = sleek dart + twin
+  engine glow + canopy; **Artillery** = heavy beveled siege chassis + deploy legs; **Harvester** = hauler +
+  collector mandibles + gold cargo core; **Scavenger** = rhombus drone + green emitter core; **Silo/Turret/
+  Foundry** got top-light volume (CC already strong). **Bloom sharpened** (higher bright-pass threshold +
+  reduced halo blur/alpha) so units stay crisp under glow. A full WebGL HDR pipeline (chromatic aberration,
+  FXAA, tighter bloom) remains the future ceiling if more fidelity is wanted.
 
 **Remaining depth (the "more strategy" set):**
 - #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
