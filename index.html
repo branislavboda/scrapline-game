@@ -845,9 +845,12 @@ class Debris {
 
 // ---------- AI ----------
 const DIFF = {
-  easy:   { aiRes:300, grace:75, cadence:4.2, waveStart:2, attackCd:30, harvesters:2, startTanks:0, upgrades:false, label:'Easy' },
-  normal: { aiRes:460, grace:45, cadence:3.0, waveStart:3, attackCd:20, harvesters:3, startTanks:1, upgrades:true,  label:'Normal' },
-  hard:   { aiRes:720, grace:30, cadence:2.2, waveStart:4, attackCd:14, harvesters:3, startTanks:2, upgrades:true,  label:'Hard' }
+  easy:   { aiRes:300, grace:75, cadence:4.2, waveStart:2, attackCd:30, harvesters:2, startTanks:0, upgrades:false, label:'Easy',
+            harvTarget:2, scavTarget:1, maxTurrets:1, compose:false },
+  normal: { aiRes:460, grace:45, cadence:3.0, waveStart:3, attackCd:20, harvesters:3, startTanks:1, upgrades:true,  label:'Normal',
+            harvTarget:4, scavTarget:1, maxTurrets:2, compose:true },
+  hard:   { aiRes:720, grace:30, cadence:2.2, waveStart:4, attackCd:14, harvesters:3, startTanks:2, upgrades:true,  label:'Hard',
+            harvTarget:6, scavTarget:2, maxTurrets:3, compose:true }
 };
 // ---- shared cost tables (scrap + the parts "tech" currency) ----
 const UNIT_COST  = { harvester:60, tank:90, scavenger:80, raider:55, artillery:130 };
@@ -862,7 +865,23 @@ const ABILITIES = {
   scan:    { name:'Recon Scan',   key:'E', parts:15, cool:22, radius:300, col:'player', ds:'reveal area' },
 };
 class AI {
-  constructor(d,team){ this.d=d||DIFF.normal; this.team=team||'ai1'; this.t=1.5; this.wave=this.d.waveStart; this.attackCd=0; this.attacking=false; this.bt=8; }
+  constructor(d,team){ this.d=d||DIFF.normal; this.team=team||'ai1'; this.t=1.5; this.wave=this.d.waveStart; this.attackCd=0; this.attacking=false; this.bt=8; this.defending=false; this.defendCd=0; }
+  // is our base under attack? (an enemy combat unit loitering near our CC)
+  underAttack(cc){ if (!cc) return false; for (const u of G.units){ if (u.dead||u.team===this.team||!(u instanceof CombatUnit)) continue; if (dist(u.x,u.y,cc.x,cc.y)<520) return true; } return false; }
+  // counter-composition: scout the enemy army's dominant class and build its hard counter
+  //   armored(tanks) -> artillery (siege) ; light(raiders) -> tank (armored) ; siege(arty) -> raider (light)
+  pickArmyType(T,foundry){
+    let light=0,armored=0,siege=0;
+    for (const u of G.units){ if (u.dead||u.team===T||!(u instanceof CombatUnit)) continue;
+      if (u.cls==='armored') armored++; else if (u.cls==='siege') siege++; else light++; }
+    const total=light+armored+siege;
+    if (total<3){ const r=Math.random(); return (foundry&&r<0.35)?'artillery':(r<0.55?'raider':'tank'); }  // nothing scouted yet -> balanced mix
+    let want; const top=Math.max(light,armored,siege);
+    if (top===armored) want = foundry?'artillery':'tank';   // siege cracks tank lines; without tech, mirror & keep teching
+    else if (top===siege) want = 'raider';                  // fast light shreds artillery
+    else want = 'tank';                                     // armored beats raider swarms
+    if (Math.random()<0.25){ const alt=['tank','raider',foundry?'artillery':'tank']; want=alt[randi(0,2)]; }  // stay mixed, not exploitable
+    return want; }
   pickTargetCC(myCC){ const rivals=G.buildings.filter(b=>b.kind==='cc'&&!b.dead&&b.team!==this.team); if (!rivals.length) return null;
     const threat=G.threat[this.team]; let best=null, bestScore=-1e9;
     for (const b of rivals){ const d=myCC?dist(myCC.x,myCC.y,b.x,b.y):1;
@@ -873,24 +892,33 @@ class AI {
       score -= crowd*70;                          // anti-gang: don't all pile the same victim
       if (score>bestScore){ bestScore=score; best=b; } }
     return best; }
-  update(dt){ this.attackCd-=dt; this.t-=dt; this.bt-=dt; const T=this.team;
+  update(dt){ this.attackCd-=dt; this.t-=dt; this.bt-=dt; this.defendCd-=dt; const T=this.team;
     const army=G.units.filter(u=>u.team===T&&u instanceof CombatUnit);
     const harv =G.units.filter(u=>u.team===T&&u instanceof Harvester);
     const scav =G.units.filter(u=>u.team===T&&u instanceof Scavenger);
     const turrets=G.buildings.filter(b=>b.team===T&&b.kind==='turret');
     const cc=G.ccOf(T); const atCap=G.pop(T)>=G.popCap(T); const foundry=G.hasTech(T);
     const afford=(scrap,pt)=> G.res[T]>=scrap && G.parts[T]>=(pt||0);
-    if (this.t<=0){ this.t=this.d.cadence;
+    const D=this.d;
+    if (this.t<=0){ this.t=D.cadence;
       if (atCap && cc && afford(STRUCT_COST.silo,STRUCT_PARTS.silo)){ G.placeStructureAt('silo',T, cc.x-rand(60,140), cc.y+rand(-150,150)); G.res[T]-=STRUCT_COST.silo; G.parts[T]-=STRUCT_PARTS.silo; }
-      else if (!atCap && harv.length<3 && afford(UNIT_COST.harvester)){ G.spawn('harvester',T); G.res[T]-=UNIT_COST.harvester; }
-      else if (!atCap && scav.length<1 && afford(UNIT_COST.scavenger)){ G.spawn('scavenger',T); G.res[T]-=UNIT_COST.scavenger; }
-      else if (!atCap && army.length<this.wave+4){ const r=Math.random(); const t=(foundry&&r<0.45)?'artillery':(r<0.6?'raider':'tank'); if (afford(UNIT_COST[t],UNIT_PARTS[t])){ G.spawn(t,T); G.res[T]-=UNIT_COST[t]; if (UNIT_PARTS[t]) G.parts[T]-=UNIT_PARTS[t]; } } }
-    // tech (Foundry) + base defense + upgrades
-    if (this.bt<=0){ this.bt=14;
-      if (cc){ if (!foundry && this.d.upgrades && afford(STRUCT_COST.foundry,STRUCT_PARTS.foundry)){ G.placeStructureAt('foundry',T, cc.x-rand(80,150), cc.y+rand(-130,130)); G.res[T]-=STRUCT_COST.foundry; G.parts[T]-=STRUCT_PARTS.foundry; }
-        else if (turrets.length<2 && afford(STRUCT_COST.turret,STRUCT_PARTS.turret)){ G.placeStructureAt('turret',T, cc.x-rand(120,180), cc.y+rand(-120,120)); G.res[T]-=STRUCT_COST.turret; G.parts[T]-=STRUCT_PARTS.turret; }
-        else if (this.d.upgrades && G.res[T]>=150 && G.parts[T]>=70){ G.buyUpgrade(T, ['range','armor','power'][randi(0,2)]); } } }
-    if (!this.attacking && this.attackCd<=0 && G.time>this.d.grace && army.length>=this.wave){ this.attacking=true; this.attackCd=this.d.attackCd;
+      else if (!atCap && harv.length<(D.harvTarget||3) && afford(UNIT_COST.harvester)){ G.spawn('harvester',T); G.res[T]-=UNIT_COST.harvester; }   // scale economy by difficulty
+      else if (!atCap && scav.length<(D.scavTarget||1) && afford(UNIT_COST.scavenger)){ G.spawn('scavenger',T); G.res[T]-=UNIT_COST.scavenger; }
+      else if (!atCap && army.length<this.wave+4){
+        let t = D.compose ? this.pickArmyType(T,foundry) : ((foundry&&Math.random()<0.45)?'artillery':(Math.random()<0.6?'raider':'tank'));
+        if (!afford(UNIT_COST[t],UNIT_PARTS[t])) t = afford(UNIT_COST.tank)?'tank':(afford(UNIT_COST.raider)?'raider':null);   // fall back off a too-costly counter
+        if (t && afford(UNIT_COST[t],UNIT_PARTS[t])){ G.spawn(t,T); G.res[T]-=UNIT_COST[t]; if (UNIT_PARTS[t]) G.parts[T]-=UNIT_PARTS[t]; } } }
+    // tech (Foundry) + base defense + upgrades. Under attack we allow one extra emergency turret.
+    if (this.bt<=0){ this.bt=14; const turretGoal=(D.maxTurrets||2)+(this.defending?1:0);
+      if (cc){ if (!foundry && D.upgrades && afford(STRUCT_COST.foundry,STRUCT_PARTS.foundry)){ G.placeStructureAt('foundry',T, cc.x-rand(80,150), cc.y+rand(-130,130)); G.res[T]-=STRUCT_COST.foundry; G.parts[T]-=STRUCT_PARTS.foundry; }
+        else if (turrets.length<turretGoal && afford(STRUCT_COST.turret,STRUCT_PARTS.turret)){ G.placeStructureAt('turret',T, cc.x-rand(120,180), cc.y+rand(-120,120)); G.res[T]-=STRUCT_COST.turret; G.parts[T]-=STRUCT_PARTS.turret; }
+        else if (D.upgrades && G.res[T]>=150 && G.parts[T]>=70){ G.buyUpgrade(T, ['range','armor','power'][randi(0,2)]); } } }
+    // defend: if our base is under attack, break off any attack and rally the army home to intercept
+    const threatened = cc && army.length && this.underAttack(cc);
+    if (threatened && this.defendCd<=0){ this.defending=true; this.defendCd=3; this.attacking=false;
+      for (const t of army){ t.attackTarget=null; t.moveTo(cc.x+rand(-100,100), cc.y+rand(-100,100), true); } }   // attack-move home -> engages attackers on arrival
+    if (!threatened) this.defending=false;
+    if (!this.defending && !this.attacking && this.attackCd<=0 && G.time>D.grace && army.length>=this.wave){ this.attacking=true; this.attackCd=D.attackCd;
       const rl=G.relays[0], goRelay = rl && rl.owner!==T && Math.random()<0.33;
       if (goRelay){ this.targetTeam=null; for (const t of army){ t.attackTarget=null; t.moveTo(rl.x+rand(-90,90),rl.y+rand(-90,90),true); } }   // sometimes seize map control
       else { const tcc=this.pickTargetCC(cc); this.targetTeam=tcc?tcc.team:null; if (tcc) for (const t of army){ t.attackTarget=null; t.moveTo(tcc.x+rand(-120,120),tcc.y+rand(-120,120),true); } }   // attack-move: grind through defenders (engage-in-range) then the CC
