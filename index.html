@@ -280,6 +280,10 @@
       <div class="srow"><div class="slabel">RESOURCE NODES</div>
         <input id="cfgNodes" class="srng" type="range" min="3" max="16" step="1" value="7"><span id="cfgNodesV" class="sval">7</span></div>
 
+      <div class="ssec">RUN MODIFIER</div>
+      <div class="srow"><div class="slabel">TWIST</div>
+        <div class="sgrp"><button class="mbtn sel" data-cfgmod="none">None</button><button class="mbtn" data-cfgmod="scrapRich">Scrap-Rich</button><button class="mbtn" data-cfgmod="debrisStorm">Debris-Storm</button><button class="mbtn" data-cfgmod="eliteAI">Elite AI</button></div></div>
+
       <div class="mstart" style="margin-top:20px"><button id="btnSetupBack">◂ BACK</button><button id="btnSetupStart">START BATTLE</button></div>
     </div>
   </div>
@@ -852,6 +856,13 @@ const DIFF = {
   hard:   { aiRes:720, grace:30, cadence:2.2, waveStart:4, attackCd:14, harvesters:3, startTanks:2, upgrades:true,  label:'Hard',
             harvTarget:6, scavTarget:2, maxTurrets:3, compose:true }
 };
+// ---- run-variety modifiers (a match-wide twist chosen in Setup) ----
+const MODIFIERS = {
+  none:        { label:'None',         note:'' },
+  scrapRich:   { label:'Scrap-Rich',   note:'Richer nodes · faster respawns' },
+  debrisStorm: { label:'Debris-Storm', note:'Wreckage clogs the lanes — scavengers matter' },
+  eliteAI:     { label:'Elite AI',     note:'The AI macros harder and strikes sooner' },
+};
 // ---- shared cost tables (scrap + the parts "tech" currency) ----
 const UNIT_COST  = { harvester:60, tank:90, scavenger:80, raider:55, artillery:130 };
 const UNIT_TIME  = { harvester:4,  tank:7,  scavenger:6,  raider:3.5, artillery:11 };
@@ -961,8 +972,11 @@ class Game {
   constructor(cfg){
     this.cfg = cfg || CFG_DEFAULTS;
     this.difficulty = DIFF[this.cfg.diff] ? this.cfg.diff : 'normal'; const d = DIFF[this.difficulty];
-    // resolve AI preset once, folding in custom aggression/economy overrides
-    const aggro=this.cfg.aiAggression ?? 1, eco=this.cfg.aiEconomy ?? 1;
+    // run modifier (a match-wide twist chosen in Setup)
+    this.modifier = MODIFIERS[this.cfg.modifier] ? this.cfg.modifier : 'none';
+    const elite = this.modifier==='eliteAI';
+    // resolve AI preset once, folding in custom aggression/economy overrides (Elite AI adds a global boost)
+    const aggro=(this.cfg.aiAggression ?? 1)*(elite?1.3:1), eco=(this.cfg.aiEconomy ?? 1)*(elite?1.35:1);
     const dd=Object.assign({}, d, { cadence:d.cadence/aggro, attackCd:d.attackCd/aggro,
       grace:d.grace/aggro, aiRes:Math.round((this.cfg.aiRes ?? d.aiRes) * eco) });
     const numAI = clamp(this.cfg.numAIs|0, 1, 3);
@@ -983,11 +997,12 @@ class Game {
     this.aiming=null; this.abilityCd={}; for (const k in ABILITIES) this.abilityCd[k]=0; this.effects=[];
     this.ais = this.aiTeams.map(t=>new AI(dd,t));
     this.queue=[]; this.boost=false; this.stats={built:0,lost:0,scrapScav:0,partsScav:0};
-    const { ccs, nodes } = layoutMap({ numTeams:this.teams.length, nodeCount:this.cfg.nodeCount,
-      placementStyle:this.cfg.placement, richness:this.cfg.nodeRichness });
+    const rich = this.modifier==='scrapRich';
+    const { ccs, nodes } = layoutMap({ numTeams:this.teams.length, nodeCount:this.cfg.nodeCount+(rich?4:0),
+      placementStyle:this.cfg.placement, richness:this.cfg.nodeRichness*(rich?1.6:1) });
     for (const c of ccs) this.buildings.push(new CommandCenter(c.x, c.y, c.team));
     for (const nd of nodes){ const lvl=nd.lvl; this.nodes.push({x:nd.x,y:nd.y,r:18+lvl*2,amt:nd.max,max:nd.max,ph:rand(0,TAU),_show:0}); }
-    this.nextNode=300;
+    this.nextNode = rich?180:300;
     // capturable center relay: hold it (uncontested) for income + vision
     this.relays=[{x:WORLD_W/2, y:WORLD_H/2, r:32, owner:null, capTeam:null, cap:0, ph:0}];
     this.nodes = this.nodes.filter(nd=> !this.relays.some(rl=>dist(nd.x,nd.y,rl.x,rl.y)<90));   // keep the relay's tile clear
@@ -998,6 +1013,8 @@ class Game {
       for (let i=0;i<d.harvesters;i++) this.spawn('harvester',t);
       for (let i=0;i<d.startTanks;i++) this.spawn('tank',t);
     }
+    // world-altering modifier effects (banner + Debris-Storm wrecks) run on the first update(), once the global G===this
+    this._modInit = this.modifier!=='none'; this.stormCd = 45;
   }
   enemiesOf(team){ return [...this.units.filter(u=>u.team!==team && !u.dead), ...this.buildings.filter(b=>b.team!==team && !b.dead)]; }
   ccOf(team){ return this.buildings.find(b=>b.team===team && b.kind==='cc' && !b.dead); }
@@ -1029,6 +1046,16 @@ class Game {
       const fc=(x/FOG)|0, fr=(y/FOG)|0, R=Math.ceil(220/FOG);
       for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){ if (dx*dx+dy*dy>R*R) continue; const fx=fc+dx,fy=fr+dy; if (fx<0||fy<0||fx>=fogCols||fy>=fogRows) continue; if (fog[fy*fogCols+fx]<1) fog[fy*fogCols+fx]=1; }
       return; } }
+  // ---- run-variety modifier: world effects (called on the first update, once G===this) ----
+  applyModifierWorld(){ const m=MODIFIERS[this.modifier]; const pcc=this.ccOf('player');
+    if (pcc && m && this.modifier!=='none') floatText(pcc.x, pcc.y-pcc.r-24, m.label.toUpperCase()+(m.note?' — '+m.note:''), COL.gold);
+    if (this.modifier==='debrisStorm'){ const n=10+this.teams.length*4; for (let i=0;i<n;i++) this.dropWreck(); this.stormCd=40; } }
+  dropWreck(){ for (let tr=0;tr<40;tr++){ const x=rand(300,WORLD_W-300), y=rand(300,WORLD_H-300), [cx,cy]=this.grid.cellOf(x,y);
+      if (!this.grid.walk(cx,cy)) continue; let ok=true;
+      for (const b of this.buildings) if (dist(x,y,b.x,b.y)<360){ ok=false; break; } if (!ok) continue;
+      for (const rl of this.relays) if (dist(x,y,rl.x,rl.y)<200){ ok=false; break; } if (!ok) continue;
+      this.wreckage.push(new Wreckage(x,y,rand(16,26),'dormant')); return true; }
+    return false; }
   dropoffOf(team,x,y){ let best=1e9,b=null; for (const bd of this.buildings){ if (bd.team!==team||bd.kind!=='cc') continue; const d=dist(x,y,bd.x,bd.y); if (d<best){best=d;b=bd;} } return b; }
   nearestClutter(x,y,maxd){ let best=maxd||1e9,t=null;
     for (const w of this.wreckage){ if (w.dead) continue; const d=dist(x,y,w.x,w.y); if (d<best){best=d;t=w;} }
@@ -1123,7 +1150,9 @@ class Game {
     for (const b of this.buildings) if (b.team==='player') reveal(b.x,b.y,360);
     for (const e of this.effects) if (e.kind==='ping') reveal(e.x,e.y,e.r); }
   update(dt){ this.time+=dt;
-    if (!this.over){ for (const ai of this.ais) ai.update(dt);
+    if (!this.over){
+      if (this._modInit){ this._modInit=false; this.applyModifierWorld(); }   // deferred so the global G is this instance
+      for (const ai of this.ais) ai.update(dt);
       for (const b of this.buildings){
         if (b.built===false){ b.buildT-=dt; b.hitFlash=Math.max(0,b.hitFlash-dt*4);
           b.hp=Math.min(b.maxhp, b.buildStartHp+(b.maxhp-b.buildStartHp)*(1-b.buildT/b.buildTime));
@@ -1151,6 +1180,9 @@ class Game {
       if (this.debris.length>520){ const drop=this.debris.length-520; for (let i=0;i<drop;i++){ const d=this.debris[i]; if (d.blocks) this.grid.unblock(d.x,d.y); } this.debris.splice(0,drop); }
       for (const nd of this.nodes){ nd.ph+=dt*2; if (nd._show>0) nd._show-=dt; }
       if (this.time>=this.nextNode){ this.nextNode+=300; this.spawnNode(); }
+      // Debris-Storm: periodic wreck surge that re-clogs the lanes (soft-capped so it can't runaway)
+      if (this.modifier==='debrisStorm'){ this.stormCd-=dt; if (this.stormCd<=0){ this.stormCd=40;
+        if (this.wreckage.length<60){ for (let i=0;i<3;i++) this.dropWreck(); const pcc=this.ccOf('player'); if (pcc) floatText(pcc.x,pcc.y-pcc.r-20,'⚠ DEBRIS SURGE',COL.dormant); } } }
       // "scrapline collapse": after 4 min, Command Centers take ramping structural damage so no match stalemates forever
       if (this.time>SUDDEN_T){ if (!this._sudden){ this._sudden=true; const pcc=this.ccOf('player'); if (pcc) floatText(pcc.x,pcc.y-pcc.r-20,'⚠ SCRAPLINE COLLAPSE',COL.fire); }
         const dps=(this.time-SUDDEN_T)*0.18;
@@ -1333,6 +1365,7 @@ const CFG_DEFAULTS = {
   fog: true,                  // fog-of-war on/off
   placement: 'symmetric',     // 'symmetric' | 'random'
   nodeCount: 7,               // number of resource nodes at start
+  modifier: 'none',           // run modifier: none | scrapRich | debrisStorm | eliteAI
 };
 let CFG = Object.assign({}, CFG_DEFAULTS), lastCfg = CFG;
 function loadCfg(){ try{ const j=localStorage.getItem('scrapline.cfg'); if(j){ const o=JSON.parse(j);
@@ -1481,6 +1514,7 @@ bindGroup('data-cfgdiff', String, v=>{ CFG.diff=v; syncCfgUI(); });
 bindGroup('data-cfgais',  Number, v=>{ CFG.numAIs=v; });
 bindGroup('data-cfgfog',  Number, v=>{ CFG.fog=!!v; });
 bindGroup('data-cfgplace',String, v=>{ CFG.placement=v; });
+bindGroup('data-cfgmod',  String, v=>{ CFG.modifier=v; });
 // push CFG -> controls (called when opening the setup screen)
 function syncCfgUI(){
   for (const [id,vid,key,fmt] of cfgSliderDefs){ const el=$id(id), out=$id(vid); if(!el) continue;
@@ -1488,7 +1522,7 @@ function syncCfgUI(){
     el.value=val; out.textContent=fmt(el.value); }
   const dv=DIFF[CFG.diff].aiRes, ares=(CFG.aiRes==null)?dv:CFG.aiRes; $id('cfgARes').value=ares; $id('cfgAResV').textContent=(CFG.aiRes==null)?'preset':(''+ares);
   const setGroup=(attr,val)=>{ for (const b of document.querySelectorAll('.mbtn['+attr+']')) b.classList.toggle('sel', b.getAttribute(attr)===String(val)); };
-  setGroup('data-cfgdiff', CFG.diff); setGroup('data-cfgais', CFG.numAIs); setGroup('data-cfgfog', CFG.fog?1:0); setGroup('data-cfgplace', CFG.placement);
+  setGroup('data-cfgdiff', CFG.diff); setGroup('data-cfgais', CFG.numAIs); setGroup('data-cfgfog', CFG.fog?1:0); setGroup('data-cfgplace', CFG.placement); setGroup('data-cfgmod', CFG.modifier||'none');
 }
 $id('btnStart').addEventListener('click',e=>{ e.currentTarget.blur(); if (appState!=='menu') return; syncCfgUI(); setState('settings'); });
 $id('btnSetupBack').addEventListener('click',e=>{ e.currentTarget.blur(); if (appState!=='settings') return; setState('menu'); });
