@@ -11,7 +11,9 @@ decisions* so a fresh session can continue without re-deriving anything.
   screen + N-team FFA, active abilities (Q/W/E), a sim-tuned balance pass (no stalemates), a StarCraft-style
   game-feel pass (tight map/speed, attack-move, rally), first-run onboarding, procedural music, juice, and a
   full **neon-holo graphics pass** (bloom + holo floor + color grade + shadows + redrawn unit/building
-  silhouettes incl. a railgun tank). All verified console-error-free.
+  silhouettes incl. a railgun tank). All verified console-error-free. **Also merged since:** #18 smarter
+  AI macro (`c8e01e4`) + #19 run-variety modifiers (`eec8bf3`) — the whole depth set (#16–#19) is now in
+  `main` — plus a launch-hardening audit (Safari + adversarial bug-hunt) that found **no bugs** (details below).
 - **THE open question is demand, not features** (see the pre-mortem lower down). **#1 next step:** the user
   does the cross-browser check (Chrome/Firefox/**Safari** — needs their machine) and a **soft-launch to
   30–50 real players** per **`docs/RELEASE.md`** (itch steps + page copy + checklist already written). Only
@@ -157,11 +159,16 @@ an earlier version of this doc said it was rejected; that's stale.)*
   reduced halo blur/alpha) so units stay crisp under glow. A full WebGL HDR pipeline (chromatic aberration,
   FXAA, tighter bloom) remains the future ceiling if more fidelity is wanted.
 
-**Remaining depth (the "more strategy" set):**
-- #16 Capturable map objectives (refineries/relays → income/vision/parts; map control).
-- #17 Active abilities (artillery barrage, scavenger overcharge, repair burst, recon ping).
-- #18 Layered enemy defense + smarter AI macro (AI expands/techs/composes; fortified base/outposts).
-- #19 Run variety + modifiers (randomized layout; scrap-rich / debris-storm / elite-AI).
+**Depth set — ALL DONE (merged to `main`):**
+- #16 ✅ Capturable map objectives — the center **Relay** (income/vision/parts, map control).
+- #17 ✅ Active abilities — Barrage / Repair Field / Recon Scan (Q/W/E).
+- #18 ✅ Smarter AI macro *(merge `c8e01e4`)* — scaling economy (`harvTarget`/`scavTarget` in `DIFF`),
+  counter-composition (`AI.pickArmyType` scouts the enemy's dominant class and builds its hard counter),
+  and threat-reactive base defense (`AI.underAttack` → break off attack, rally home, emergency turret).
+  Sim-verified: 100% resolve across 1v1 & 4-team normal/hard, no throws, difficulty gradient intact.
+- #19 ✅ Run-variety modifiers *(merge `eec8bf3`)* — a "RUN MODIFIER" row in Setup (`CFG.modifier`,
+  persisted): **Scrap-Rich** (+4 nodes, richness ×1.6, respawn 180s), **Debris-Storm** (scatters dormant
+  wrecks + 40s surges, soft-capped, so scavengers matter), **Elite AI** (aggression ×1.3, economy ×1.35).
 
 **Productionization backlog (from the approved plan):**
 - #6 Autosave + resume (localStorage, guarded JSON.parse, versioned — survive a refresh).
@@ -180,8 +187,24 @@ Approved plan with fuller detail: `~/.claude/plans/make-these-suggestions-into-w
 - Balance numbers (costs/HP/counter multipliers/build times) are a **first pass, not human-playtested** —
   a real playtest/tuning pass is still owed. Ask the user how it *feels* before deep balance work.
 
+## Launch-hardening audit (done — no code changes needed)
+A B4 Safari + B5 adversarial bug-hunt pass over the merged `main` found **no bugs** and required **no
+fixes**. Verified by code-read + headless stress: Safari paths are already defensive
+(`webkitAudioContext` fallback + `ac.resume()` on suspend, custom `roundRect`, `postFX` try/catch →
+`FX_OFF` graceful degrade, `createPattern` null-guard); grid `block`/`unblock` is balanced (wrecks die
+only via `clearClutter`, which unblocks); `Grid.path` is null-safe (always returns a non-empty array, so
+Debris-Storm clutter can't crash pathing); abilities tolerate empty/off-map targets; the restart-guard
+"bit twice" defenses are all intact and the new `data-cfgmod` buttons blur via `bindGroup`. Adversarial
+headless stress (max clutter + edge economy + ability hammering, all bot-driven) threw zero exceptions,
+every match resolved, and growth stayed bounded (debris ≤520, wrecks ≤~70, obstacles ≤~220).
+**Caveat:** headless can't exercise real Safari GPU rendering, audio autoplay, or DOM drag-select under
+real keyboard focus — those still ride on the user's cross-browser test (`docs/RELEASE.md`).
+
 ## Suggested first move in the new session
-With **#24 done**, the highest-value next step is a **playtest/tuning pass** on 2–4-player FFA (AI
-`DIFF` numbers, the new aggression/economy sliders, node/base spacing on the bigger map) — ask the user
-how it *feels* first. Then pick from the depth set (#18 smarter AI macro pairs well with FFA). Re-publish
-the Artifact once the tool is available so the hosted link isn't stale.
+The depth set (#16–#19) is **done and merged to `main`**, and the launch-hardening audit is clean, so the
+game is in the strongest pre-launch shape yet. The single open question stays **demand, not features**:
+the highest-value next step is the user's **cross-browser check (Chrome/Firefox/Safari — their machine)**
+and a **soft-launch to 30–50 real players** per `docs/RELEASE.md`. A **feel playtest** of 2–4-player FFA
+(the new AI macro, `DIFF` numbers, aggression/economy sliders, the run modifiers) is owed before any deep
+balance work — ask the user how it *feels* first. Re-publish the Artifact once the tool is available so
+the hosted link isn't stale.
